@@ -1,0 +1,45 @@
+#!/bin/sh
+
+# Author: Teodoro B. Mendes <teobmendes@gmail.com>
+
+
+TOKEN=
+CHAT_ID=
+MESSAGE="$*"
+
+PYTHON=python3
+
+send () {
+$PYTHON << EOF
+import telepot
+
+bot = telepot.Bot("$TOKEN")
+chat_id = "$CHAT_ID"
+
+bot.sendMessage(chat_id, "$MESSAGE")
+EOF
+
+}
+
+command -v "python3" >/dev/null 
+if [ "$?" -eq 1 ]; then
+	sudo apt update
+	sudo apt install python3.6 -y
+fi
+
+command -v "pip3" >/dev/null
+if [ "$?" -eq 1 ]; then
+	sudo apt update
+	sudo apt install python3-pip -y
+fi
+
+telepotter=$(pip3 list 2>/dev/null | grep telepot)
+if [ -z "$telepotter" ]; then
+ pip3 install telepot
+fi
+
+send $MESSAGE
+
+
+
+

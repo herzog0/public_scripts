@@ -1,0 +1,253 @@
+#!/bin/sh
+
+# Author: Teodoro B. Mendes <teobmendes@gmail.com>
+# This script's intent is to provide a simple way to update multiple packages that depend on each other and that lives
+# inside the same directory.
+# My problem was:
+# I had this folder
+# Projects/
+# ├── pck1/
+# ├── pck2/
+# ├── ....
+# └── pckn/
+# And pckx is a dependency to pcka, pckb, pckc...
+# Whenever I had to make an important change in pckx I had to go in each dependant project, update pckx's version,
+# update the dependant package version, npm install, npm build, pack publish etc...
+# This script does all this, but it will help you by:
+# 1) Recursively find all packages that depend on pckx and are out of date ( you must provide the new pckx's version ).
+# 2) Loop through each package folder asking to update pckx's version and the package version ( it does an increment
+# of its rightmost digit ).
+# 3) If you accept the update, the script checks if current git index is equal to HEAD, if not, it does not let you
+# update the package.
+# 4) If passes '3)', runs 'npm install', 'npm run build', 'npm pack' and 'npm publish'.
+# 5) If you want, the script automatically commits the new changes and tags the commit.
+# A good note is that you don't have to worry about the script trying to search in standard non-user folders, like
+# node_modules. This happens because we use 'ack' as opposed to 'find' command to find all package.json files in that
+# folder.
+
+
+
+NPM_PCKG=""
+NEW_VERSION=""
+OLD_DIR=""
+UPDATES=""
+
+# grey="\033[0;37m"
+green="\033[1;32m"
+# yellow="\033[1;33m"
+red="\033[1;31m"
+purple="\033[1;35m"
+#blue="\033[1;34m"
+light_blue="\033[1;36m"
+reset="\033[0m"
+# blink_red="\033[5m\033[1;31m"
+
+
+_pushd () {
+  # This doesn't work as the built-in pushd
+	dir_name=$(dirname "$1")
+	OLD_DIR=$(pwd)
+	cd "$OLD_DIR/$dir_name" || { echo "$OLD_DIR/$dir_name doesn't exist, exiting..."; exit 1; }
+}
+
+_popd () {
+    # This doesn't work as the built-in popd
+	cd "$OLD_DIR" || { echo "$OLD_DIR doesn't exist, exiting..."; exit 1; }
+}
+
+yn () {
+	# shellcheck disable=SC2039
+	echo -n "$1 $green [y/n] :: $reset"
+	read -r ans
+	if [ "$ans" = "${ans#[yn]}" ]
+	then
+		echo "Wrong input!"
+	fi
+	if [ "$ans" != "${ans#[y]}" ]
+	then
+		return "0"
+	else
+		return "1"
+	fi
+}
+
+perform_package_json_version_increment () {
+    if [ ! -f "./package.json" ]
+    then
+        echo "There's no package.json here to update..."
+        exit 1
+    fi
+    this_pckg_version=$(grep version "./package.json" | head -1 | awk -F: '{ print $2 }' | sed 's/[", ]//g') 
+    new_version=$( increment_version $this_pckg_version )
+
+    sed -i "/version/ s=$this_pckg_version=$new_version=" "./package.json"
+    echo "$green Updated your package.json successfully to version: $purple $new_version $reset"
+}
+
+increment_version () {
+    python - "$1" <<EOF
+import sys
+version = sys.argv[1]
+base, _, minor = version.rpartition('.')
+print(base + '.' + str(int(minor) + 1))
+EOF
+}
+
+
+print_pckg_names_and_versions () {
+    files_to_show=$(ack -f | grep "package.json")
+    for file in $files_to_show
+    do
+      name=$(grep -e "[\'\"]name[\'\"][ :][ :]" "$file"| awk -F: '{ print $2 }' | sed 's/[", '\'']//g')
+      version=$(grep -e "['\''\"]version['\''\"][ :][ :]['\''\"][0-9]*\.[0-9]*\.[0-9]*['\''\"]" "$file" | awk -F: '{ print $2 }' | sed 's/[", '\'']//g')
+      if [ "$1" = "SHOW_PATHS" ]
+      then
+        filepath=$(readlink -f "$file")
+        echo "$green$name:: $purple$version $light_blue$filepath$reset"
+      else
+        echo "$green$name:: $purple$version$reset"
+      fi
+    done
+}
+
+
+update_all_packages () {
+  files_to_update=$(ack -f | grep "package.json" | xargs grep -e "$NPM_PCKG\".*[0-9]*\.[0-9]*" | grep -v "$NEW_VERSION" | cut -d ":" -f 1)
+  for file in $files_to_update
+  do
+    yn "$green Update package $file$reset?\n$red Note that we will increase its rightmost digit$reset\n"
+    result="$?"
+    if [ "$result" = "0" ]
+    then
+      this_pckg_dirname=$(dirname "$file")
+      this_pckg_name=$(basename "$this_pckg_dirname")
+      _pushd "$file"
+      git diff-index --quiet HEAD
+      result="$?"
+      _popd
+      if [ "$result" = "0" ]
+      then
+        old_pckg_version=$(grep "$NPM_PCKG\"" "$file" | awk -F: '{ print $2 }' | sed 's/[",^~>=< ]//g')
+        escaped_pckg_name=$( echo "$NPM_PCKG" | sed "s=/=\\\/=g" )
+
+        this_pckg_version=$(grep version "$file" | head -1 | awk -F: '{ print $2 }' | sed 's/[", ]//g')
+        new_this_pckg_version=$( increment_version "$this_pckg_version" )
+        echo "$green###################################################################$reset"
+        echo "$purple Version $old_pckg_version of package $NPM_PCKG updated to $NEW_VERSION$reset"
+        echo "$purple Version $this_pckg_version of $this_pckg_name changed to $new_this_pckg_version$reset"
+        echo "$red===================================================================$reset"
+        sed "/$escaped_pckg_name/ s=$old_pckg_version=$NEW_VERSION=" "$file" | sed "/version/ s=$this_pckg_version=$new_this_pckg_version="
+        echo "$green###################################################################$reset"
+        yn "Check the update. Proceed to update?"
+        result="$?"
+        if [ "$result" = "0" ]
+        then
+          sed -i "/$escaped_pckg_name/ s=$old_pckg_version=$NEW_VERSION=" "$file"
+          sed -i "/version/ s=$this_pckg_version=$new_this_pckg_version=" "$file"
+          _pushd "$file"
+          npm install
+          npm_install_result="$?"
+          if [ "$npm_install_result" = "0" ]
+          then
+            echo "$green npm install successful!$reset"
+            npm run build
+            npm_build_result="$?"
+            if [ "$npm_build_result" = "0" ]
+            then
+              echo "$green npm run build successful!$reset"
+              npm pack
+              npm publish
+              UPDATES="$UPDATES\n$green$this_pckg_name changed from $this_pckg_version to $new_this_pckg_version$reset"
+              rm ./*"$new_this_pckg_version".tgz
+              yn "Commit this package update?"
+                                result="$?"
+                                if [ "$result" = "0" ]
+                                then
+                git add .
+                git commit -m "Updated $NPM_PCKG to version $NEW_VERSION"
+                git tag v"$new_this_pckg_version"
+              fi
+              _popd
+            else
+              echo "$red npm run build failed :( $reset"
+              echo "$red Error! Rolling back versions..."
+              sed -i "/$escaped_pckg_name/ s=$NEW_VERSION=$old_pckg_version=" package.json
+              sed -i "/version/ s=$new_this_pckg_version=$this_pckg_version=" package.json
+              UPDATES="$UPDATES\n$red$this_pckg_name wasn't changed due to failed npm build$reset"
+              _popd
+            fi
+          else
+            echo "$red npm install failed :( $reset"
+            echo "$red Error! Rolling back versions..."
+            sed -i "/$escaped_pckg_name/ s=$NEW_VERSION=$old_pckg_version=" package.json
+            sed -i "/version/ s=$new_this_pckg_version=$this_pckg_version=" package.json
+            UPDATES="$UPDATES\n$red$this_pckg_name wasn't changed due to failed npm install$reset"
+            _popd
+          fi
+        fi
+      else
+        echo "There are modified files in this project! Commit changes before updating packages..."
+        UPDATES="$UPDATES\n$red$this_pckg_name wasn't changed due to uncommitted changes in its repository$reset"
+      fi
+    fi
+  done
+
+  echo "$UPDATES"
+}
+
+
+main () {
+  if [ -z "$NPM_PCKG" ] || [ -z "$NEW_VERSION" ]
+  then
+    error
+    exit 1
+  else
+    update_all_packages
+  fi
+}
+
+error () {
+  if [ $# -gt 0 ]
+  then
+	  >&2 echo "$@"
+	fi
+	print_usage
+	exit 1
+}
+
+print_usage () {
+	printf "uap - Update All Packages
+Usage: uap [options] [package's name] [package's new version]
+
+Options:
+
+	-h      This help message.
+	-p      Only prints all packages names and versions in that folder (and subfolders)
+        -P      Same as above but with full path
+	-u      (-v required also) If no options are provided, this is the one supposed. It searches and updates
+	        a package version in all package.json files it can find in that folder, taking
+	        care of re-publishing the updated package and committing the change.
+        -s      Perform a simple update on the righmost digit of the package.json file in your current dir
+	-v      The package's version being updated.
+"
+}
+
+
+while getopts ':hpPsu:v:' flag; do
+	case "${flag}" in
+		u) NPM_PCKG="${OPTARG}";;
+		v) NEW_VERSION="${OPTARG}";;
+		p) print_pckg_names_and_versions
+		  exit 0;;
+		P) print_pckg_names_and_versions "SHOW_PATHS"
+		  exit 0;;
+                s) perform_package_json_version_increment
+                  exit 0;;
+		h) print_usage
+	          exit 0;;
+		:) error "Missing argument for -$OPTARG" >&2;;
+		*) error "Unexpected argument";;
+	esac
+done
+
+main

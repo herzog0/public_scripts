@@ -1,0 +1,83 @@
+#!/bin/sh
+# Author: Teodoro B. Mendes <teobmendes@gmail.com>
+
+
+SETTINGS_PATH="./settings.json"
+PARENT_PATH="$HOME/Repos/"
+
+get_default_repo_path () {
+    settings=$(cat "$SETTINGS_PATH")
+    echo "$settings" | jq -r ".default_repo_path"
+}
+
+set_default_repo_path () {
+    settings=$(cat "$SETTINGS_PATH")
+    echo "$settings" | jq ".default_repo_path = \"$1\"" > "$SETTINGS_PATH"
+}
+
+commit_on_repo () {
+    cd "$(get_default_repo_path)" || exit 1
+    git add .
+    git commit -m "$@" 
+}
+
+get_all_repos () {
+    cd "$PARENT_PATH" || exit 1
+    find "$(pwd)" -name ".git" 2>/dev/null | xargs dirname
+}
+
+
+get_git_status () {
+    cd "$(get_default_repo_path)" || exit 1
+    git status
+    #git status --porcelain | awk 'NF' | cut -d ' ' -f 3
+}
+
+get_commit_message_screen () {
+    status_msg=$( get_git_status )
+    drp=$( get_default_repo_path )
+    yad --no-markup --entry --title "Set commit message" --text "Repository: $drp\n\nInsert the commit message:\n$status_msg" --buttons-layout=spread --button="Set default repo":2 --button="Cancel":1 --button="Ok":0
+}
+
+get_default_repo_selection_screen () {
+    all_repos=$( get_all_repos )
+    all_repos=$(echo "$all_repos" | tr '\n' ' ')
+    echo "$all_repos" | xargs yad --list --width=700 --height=500 --title="Set default repo" --column="Found .git repos in folder" | rev | cut -c 2- | rev
+}
+
+while true; do
+    commit_msg=$( get_commit_message_screen )
+    signal="$?"
+    if [ "$signal" -eq 1 ]; then \
+        exit 0
+        break
+    fi
+
+    if [ "$signal" -eq 0 ]; then \
+        if [ -n "$commit_msg" ]; then \
+            commit_on_repo "$commit_msg"
+            break
+        else
+            drp=$( get_default_repo_path )
+            terminator -e "cd $drp; git status; zsh"
+            break
+        fi
+    fi
+
+    if [ "$signal" -eq 2 ]; then \
+        new_default_repo=$( get_default_repo_selection_screen )
+        repo_sel_signal="$?"
+
+        if [ "$repo_sel_signal" -eq 0 ]; then
+            if [ -z "$new_default_repo" ]; then
+                continue
+            else
+                set_default_repo_path "$new_default_repo"
+                continue
+            fi
+        else
+            continue
+        fi
+    fi
+    break
+done

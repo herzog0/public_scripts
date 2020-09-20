@@ -1,0 +1,75 @@
+#!/bin/sh
+# Author: Teodoro B. Mendes <teobmendes@gmail.com>
+
+TOKEN=
+CHAT_ID=
+MIMETYPE=$(mimetype --output-format %m "$1" | awk 'NF')
+PARSE_MODE=$2
+PYTHON=python3
+PWD=$(pwd)
+
+# mimetype --output-format %m
+
+echo "mimetype is: $MIMETYPE"
+
+if [ -z "$MIMETYPE" ]; then \
+    MIMETYPE='inline'
+    MESSAGE="$(date)\n$1"
+else
+    FILENAME="$1"
+    shift
+    if [ $# -gt 0 ]; then \
+        MESSAGE="$(date)\n$*"
+    else
+        MESSAGE="$(date)"
+    fi
+fi
+
+isdir="$MIMETYPE"
+dir="directory"
+
+if [ ! "$MIMETYPE" = "inline" ] && [ "${isdir#*$dir}" != "$MIMETYPE" ]; then
+    echo "$FILENAME" | xargs zip -r "${FILENAME}.zip"
+    FILENAME="${FILENAME}.zip"
+    MIMETYPE=$(mimetype --output-format %m "$FILENAME" | awk 'NF')
+    echo "is directory!"
+fi
+
+
+send () {
+$PYTHON << EOF
+import telepot
+
+bot = telepot.Bot("$TOKEN")
+chat_id = "$CHAT_ID"
+
+mimetypes = {
+    bot.sendDocument: ('document', ['xml', 'text', 'document', 'Certificate', 'script', 'pdf', 'zip', 'compressed', 'cert', 'yaml', 'yml', 'json', 'sql']),
+    bot.sendAudio: ('audio', ['audio']),
+    bot.sendVideo: ('video', ['video']),
+    bot.sendPhoto: ('image', ['image'])
+}
+
+
+sent = False
+for t in list(mimetypes.items()):
+    if any(word in "$MIMETYPE" for word in t[1][1]):
+        print(f"Sending {t[1][0]}")
+        t[0](chat_id, open("${PWD}/$FILENAME", 'rb'), caption="$MESSAGE")
+        sent = True
+        break
+    else:
+        if 'inline' in "$MIMETYPE":
+            if '$PARSE_MODE' and '$PARSE_MODE' == "html":
+                bot.sendMessage(chat_id, "$MESSAGE", parse_mode="html")
+            else:
+                bot.sendMessage(chat_id, "$MESSAGE")
+            sent = True
+            break
+
+if not sent:
+    print('Nothing to do :(')
+EOF
+}
+
+send

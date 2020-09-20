@@ -1,0 +1,56 @@
+#!/bin/sh
+
+# Author: Teodoro B. Mendes <teobmendes@gmail.com>
+
+prompt_pgrep_outputs () {
+    echo "$1" | fzf
+}
+
+remove_internet_access () {
+  PROCESS_SEARCH="$1"
+
+  [ -z "$PROCESS_SEARCH" ] && { echo "No arguments provided! Exiting.."; exit 1; }
+
+  pgrep_content=$( pgrep -l "$PROCESS_SEARCH" )
+
+  [ -z "$pgrep_content" ] && { echo "No content found for $PROCESS_SEARCH"; exit 1; }
+
+
+  if [ ! -e /sys/fs/cgroup/net_cls/block ]
+  then
+      sudo mkdir /sys/fs/cgroup/net_cls/block
+      echo 42 | sudo tee -a /sys/fs/cgroup/net_cls/block/net_cls.classid
+      sudo iptables -A OUTPUT -m cgroup --cgroup 42 -j DROP
+  fi
+
+  pid_line=$(prompt_pgrep_outputs "$pgrep_content")
+  until [ -z "$pid_line" ]
+  do
+      pgrep_content=$(echo "$pgrep_content" | sed "/$pid_line/d")
+      pid=$(echo "$pid_line" | cut -d ' ' -f 1)
+      echo "$pid" | sudo tee -a /sys/fs/cgroup/net_cls/block/tasks
+      pid_line=$(prompt_pgrep_outputs "$pgrep_content")
+  done
+}
+
+give_internet_access_back () {
+  [ ! -e /sys/fs/cgroup/net_cls/block ] && { echo "No block/ dir found under cgroups folder"; exit 1; }
+  content=$(sudo cat /sys/fs/cgroup/net_cls/block/tasks)
+  [ -z "$content" ] && { echo "No pid in the tasks file! Exiting.."; exit 1; }
+  for line in $content
+  do
+    echo "$line" | sudo tee -a /sys/fs/cgroup/net_cls/tasks
+  done
+}
+
+# Restore internet option
+if [ "$1" = "-r" ]
+then
+  give_internet_access_back
+else
+  remove_internet_access "$1"
+fi
+
+
+
+
