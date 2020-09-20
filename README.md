@@ -55,7 +55,7 @@ you'll probably loose a long time searching for repos).
 
 # progbar
 
-It's prints a nice progress bar until your process pid exists!  
+It prints a nice progress bar until your process pid exists!  
 
 ## Dependencies
 
