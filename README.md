@@ -99,7 +99,7 @@ telepot (installable by pip)
 Also, you'll have to create a bot and retrieve your chat id!  
 Do the first task by initating a conversation with @BotFather. It'll do the rest.  
 
-To find your chat id, you can call @chatid_echo_bot. It will echo your chat id, then you can set the require environment variables in the script. 
+To find your chat id, you can call @chatid_echo_bot. It will echo your chat id, then you can set the required environment variables in the script. 
 
 ### Usage:
 
