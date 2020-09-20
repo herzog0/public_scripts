@@ -119,7 +119,7 @@ In that case, just open the script with your editor and put the printed mimetype
 
 # telegram_logger
 
-This is a subset of the script `send_to_telegram`. This will works the same, but is intended to just send text to your telegram bot.  It's actually a very useful script.  
+This is a subset of the script `send_to_telegram`. This works the same, but is intended to just send text to your telegram bot.  It's actually a very useful script.  
 (See the dependency section of `send_to_telegram` because there's two more simple steps to configure).
 
 ## Dependencies
