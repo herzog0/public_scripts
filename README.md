@@ -175,29 +175,29 @@ This script's intent is to provide a simple way to update multiple packages that
 
 Also, you have simple ways to print all project names and version within a certain folder.  
 
-My problem was:
-I had this folder
-Projects/
-├── pck1/
-├── pck2/
-├── ....
-└── pckn/
-And pckx is a dependency to pcka, pckb, pckc...
+My problem was:  
+I had this folder  
+Projects/  
+├── pck1/  
+├── pck2/  
+├── ....  
+└── pckn/  
+And pckx is a dependency to pcka, pckb, pckc...  
 Whenever I had to make an important change in pckx I had to go in each dependant project, update pckx's version,
-update the dependant package version, npm install, npm build, pack publish etc...
-This script does all this, but it will help you by:
-1) Recursively find all packages that depend on pckx and are out of date ( you must provide the new pckx's version ).
+update the dependant package version, npm install, npm build, pack publish etc...  
+This script does all this, but it will help you by:  
+1) Recursively find all packages that depend on pckx and are out of date ( you must provide the new pckx's version ).  
 2) Loop through each package folder asking to update pckx's version and the package version ( it does an increment
-of its rightmost digit ).
+of its rightmost digit ).  
 3) If you accept the update, the script checks if current git index is equal to HEAD, if not, it does not let you
-update the package.
-4) If passes '3)', runs 'npm install', 'npm run build', 'npm pack' and 'npm publish'.
-5) If you want, the script automatically commits the new changes and tags the commit.
+update the package.  
+4) If passes '3)', runs 'npm install', 'npm run build', 'npm pack' and 'npm publish'.  
+5) If you want, the script automatically commits the new changes and tags the commit.  
 A good note is that you don't have to worry about the script trying to search in standard non-user folders, like
 node_modules. This happens because we use 'ack' as opposed to 'find' command to find all package.json files in that
-folder.
-
-Just use `uap -h` and see what else it can do!  
+folder.  
+  
+Just use `uap -h` and see what else it can do!    
 
 
 ## Dependencies
