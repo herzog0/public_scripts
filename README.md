@@ -147,7 +147,7 @@ $ <command on your remote server>; telegram_logger "Work done in your server $(h
 # toggle_pid_network
 
 This script moves a provided PID to a `cgroup` with a blocked network.  
-Sometimes you just want the remove internet access from a process. Well, with this, your life get's easier.  
+Sometimes you just want to remove internet access from a process. Well, with this, your life get's easier.  
 
 ## Dependencies
 
